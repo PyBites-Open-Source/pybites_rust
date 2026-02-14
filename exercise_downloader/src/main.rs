@@ -103,7 +103,7 @@ fn write_exercise(path: &Path, template: &String) -> std::io::Result<()> {
     let filename = src_dir.join("lib.rs");
 
     if fs::exists(&filename)? {
-        // backup the original lib.rs (exercise file) by adding a UNIX_EPOCH timestamp after .rs
+        // backup the exercise file in case it was already solved
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -179,6 +179,7 @@ fn write_all_exercises(base_path: &Path, bites: &[Bite]) -> std::io::Result<()> 
             &bite.author,
         )?;
         write_exercise(&exercise_path, &bite.template)?;
+        println!("{:#?} ✅", bite.name);
     }
 
     write_root_toml(base_path, bites)?;
@@ -203,6 +204,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         base_path.display()
     );
 
+    // just testing, print out the status and headers and exit
     let args: Vec<String> = env::args().collect();
     if args.contains(&String::from("--test")) {
         println!("Status: {}", response.status());
@@ -215,10 +217,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     write_all_exercises(&base_path, &bites)?;
-
-    for bite in &bites {
-        println!("{:#?} ✅", bite.name);
-    }
 
     Ok(())
 }
