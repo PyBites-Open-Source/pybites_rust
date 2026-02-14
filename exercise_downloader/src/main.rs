@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::SystemTime;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct Bite {
     name: String,
     slug: String,
@@ -144,20 +144,56 @@ package_description\n"
     Ok(())
 }
 
+fn auth_status_message(api_key: &Option<String>) -> &'static str {
+    if api_key.is_some() {
+        "Authenticating with API key"
+    } else {
+        "No API key set (PYBITES_API_KEY), downloading free exercises only"
+    }
+}
+
+fn build_request(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    api_key: Option<&str>,
+) -> reqwest::blocking::RequestBuilder {
+    let mut request = client.get(url);
+    if let Some(key) = api_key {
+        request = request.header("X-API-Key", key);
+    }
+    request
+}
+
+fn write_all_exercises(base_path: &Path, bites: &[Bite]) -> std::io::Result<()> {
+    fs::create_dir_all(base_path)?;
+
+    for bite in bites {
+        let exercise_path = base_path.join(&bite.level).join(&bite.slug);
+        fs::create_dir_all(&exercise_path)?;
+        write_toml(&exercise_path, &bite.slug, &bite.libraries)?;
+        write_markdown(
+            &exercise_path,
+            &bite.name,
+            &bite.description,
+            &bite.level,
+            &bite.author,
+        )?;
+        write_exercise(&exercise_path, &bite.template)?;
+    }
+
+    write_root_toml(base_path, bites)?;
+    write_root_readme(base_path, bites)?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // define the base_path (current directory / exercises)
     let base_path = env::current_dir().unwrap().join("exercises");
 
     let api_key = env::var("PYBITES_API_KEY").ok();
 
     let client = reqwest::blocking::Client::new();
-    let mut request = client.get("https://rustplatform.com/api/");
-    if let Some(ref key) = api_key {
-        println!("Authenticating with API key");
-        request = request.header("X-API-Key", key);
-    } else {
-        println!("No API key set (PYBITES_API_KEY), downloading free exercises only");
-    }
+    let request = build_request(&client, "https://rustplatform.com/api/", api_key.as_deref());
+    println!("{}", auth_status_message(&api_key));
 
     print!("Downloading the exercises from Pybites Rust (rustplatform.com)");
     let response = request.send()?;
@@ -167,46 +203,311 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         base_path.display()
     );
 
-    // collect the arguments
     let args: Vec<String> = env::args().collect();
-    // just testing, print out the status and headers and exit
     if args.contains(&String::from("--test")) {
         println!("Status: {}", response.status());
         println!("Headers:\n{:#?}", response.headers());
         return Ok(());
     }
 
-    // extract the exercises from the response
     let bites: Vec<Bite> = response.json()?;
     println!("{:#?} exercises found!", bites.len());
     println!();
 
-    // make sure the base path (exercises) exists
-    fs::create_dir_all(&base_path)?;
+    write_all_exercises(&base_path, &bites)?;
 
     for bite in &bites {
-        print!("{:#?}", bite.name);
-        let slug = &bite.slug;
-        let exercise_path = &base_path.join(&bite.level).join(slug);
-
-        // make sure the exercise directory exists
-        fs::create_dir_all(exercise_path)?;
-        // re-write/update the toml and md files but make a backup copy of the
-        // exercise file if it exists, in case it was already solved
-        write_toml(exercise_path, slug, &bite.libraries)?;
-        write_markdown(
-            exercise_path,
-            &bite.name,
-            &bite.description,
-            &bite.level,
-            &bite.author,
-        )?;
-        write_exercise(exercise_path, &bite.template)?;
-        println!(" ✅");
+        println!("{:#?} ✅", bite.name);
     }
 
-    write_root_toml(&base_path, &bites)?;
-    write_root_readme(&base_path, &bites)?;
-
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn sample_bite(name: &str, slug: &str, level: &str) -> Bite {
+        Bite {
+            name: name.to_string(),
+            slug: slug.to_string(),
+            description: "A test exercise".to_string(),
+            level: level.to_string(),
+            template: "fn main() {}".to_string(),
+            libraries: "serde = \"1.0\"\n".to_string(),
+            author: "testauthor".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_bite_deserialize() {
+        let json = r#"{
+            "name": "Hello",
+            "slug": "hello",
+            "description": "desc",
+            "level": "intro",
+            "template": "fn main() {}",
+            "libraries": "",
+            "author": "bob"
+        }"#;
+        let bite: Bite = serde_json::from_str(json).unwrap();
+        assert_eq!(bite.name, "Hello");
+        assert_eq!(bite.slug, "hello");
+        assert_eq!(bite.level, "intro");
+    }
+
+    #[test]
+    fn test_bite_deserialize_list() {
+        let json = r#"[
+            {"name":"A","slug":"a","description":"d","level":"intro","template":"t","libraries":"","author":"x"},
+            {"name":"B","slug":"b","description":"d","level":"easy","template":"t","libraries":"","author":"x"}
+        ]"#;
+        let bites: Vec<Bite> = serde_json::from_str(json).unwrap();
+        assert_eq!(bites.len(), 2);
+        assert_eq!(bites[0].slug, "a");
+        assert_eq!(bites[1].slug, "b");
+    }
+
+    #[test]
+    fn test_write_toml() {
+        let dir = TempDir::new().unwrap();
+        let libs = "serde = \"1.0\"\n".to_string();
+        write_toml(dir.path(), "my-exercise", &libs).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
+        assert!(content.contains("name = \"my-exercise\""));
+        assert!(content.contains("edition = \"2024\""));
+        assert!(content.contains("[dependencies]"));
+        assert!(content.contains("serde = \"1.0\""));
+    }
+
+    #[test]
+    fn test_write_toml_empty_libraries() {
+        let dir = TempDir::new().unwrap();
+        let libs = String::new();
+        write_toml(dir.path(), "bare-exercise", &libs).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
+        assert!(content.contains("name = \"bare-exercise\""));
+        assert!(content.contains("[dependencies]"));
+    }
+
+    #[test]
+    fn test_write_exercise_creates_src_dir_and_lib() {
+        let dir = TempDir::new().unwrap();
+        let template = "fn main() { println!(\"hello\"); }".to_string();
+        write_exercise(dir.path(), &template).unwrap();
+
+        let lib_path = dir.path().join("src").join("lib.rs");
+        assert!(lib_path.exists());
+        let content = fs::read_to_string(lib_path).unwrap();
+        assert_eq!(content, template);
+    }
+
+    #[test]
+    fn test_write_exercise_backs_up_existing() {
+        let dir = TempDir::new().unwrap();
+        let original = "fn original() {}".to_string();
+        let updated = "fn updated() {}".to_string();
+
+        write_exercise(dir.path(), &original).unwrap();
+        write_exercise(dir.path(), &updated).unwrap();
+
+        let lib_content = fs::read_to_string(dir.path().join("src").join("lib.rs")).unwrap();
+        assert_eq!(lib_content, updated);
+
+        let backup_files: Vec<_> = fs::read_dir(dir.path().join("src"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().to_string_lossy().contains("lib.rs."))
+            .collect();
+        assert_eq!(backup_files.len(), 1);
+
+        let backup_content = fs::read_to_string(backup_files[0].path()).unwrap();
+        assert_eq!(backup_content, original);
+    }
+
+    #[test]
+    fn test_write_markdown() {
+        let dir = TempDir::new().unwrap();
+        write_markdown(dir.path(), "Test Bite", "Do the thing", "easy", "bob").unwrap();
+
+        let content = fs::read_to_string(dir.path().join("bite.md")).unwrap();
+        assert!(content.contains("# Test Bite"));
+        assert!(content.contains("Level: easy"));
+        assert!(content.contains("Author: bob"));
+        assert!(content.contains("Do the thing"));
+    }
+
+    #[test]
+    fn test_write_root_toml() {
+        let dir = TempDir::new().unwrap();
+        let bites = vec![
+            sample_bite("Hello", "hello", "intro"),
+            sample_bite("Advanced", "advanced", "medium"),
+        ];
+        write_root_toml(dir.path(), &bites).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
+        assert!(content.contains("[workspace]"));
+        assert!(content.contains("resolver = \"3\""));
+        assert!(content.contains("\"intro/hello\""));
+        assert!(content.contains("\"medium/advanced\""));
+    }
+
+    #[test]
+    fn test_write_root_toml_empty() {
+        let dir = TempDir::new().unwrap();
+        let bites: Vec<Bite> = vec![];
+        write_root_toml(dir.path(), &bites).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
+        assert!(content.contains("[workspace]"));
+        assert!(content.contains("members = ["));
+    }
+
+    #[test]
+    fn test_write_root_readme() {
+        let dir = TempDir::new().unwrap();
+        let bites = vec![
+            sample_bite("Hello", "hello", "intro"),
+            sample_bite("Strings", "strings", "easy"),
+        ];
+        write_root_readme(dir.path(), &bites).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("README.md")).unwrap();
+        assert!(content.contains("# Pybites Rust"));
+        assert!(content.contains("### Level: intro"));
+        assert!(content.contains("### Level: easy"));
+        assert!(content.contains("[intro/hello](intro/hello/bite.md)"));
+        assert!(content.contains("[easy/strings](easy/strings/bite.md)"));
+    }
+
+    #[test]
+    fn test_write_root_readme_skips_unlisted_levels() {
+        let dir = TempDir::new().unwrap();
+        let bites = vec![sample_bite("Hard One", "hard-one", "hard")];
+        write_root_readme(dir.path(), &bites).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("README.md")).unwrap();
+        assert!(!content.contains("hard-one"));
+    }
+
+    #[test]
+    fn test_auth_status_message_with_key() {
+        let key = Some("abc-123".to_string());
+        assert_eq!(auth_status_message(&key), "Authenticating with API key");
+    }
+
+    #[test]
+    fn test_auth_status_message_without_key() {
+        let key: Option<String> = None;
+        assert!(auth_status_message(&key).contains("No API key set"));
+    }
+
+    #[test]
+    fn test_build_request_without_api_key() {
+        let client = reqwest::blocking::Client::new();
+        let request = build_request(&client, "https://example.com/api/", None);
+        let built = request.build().unwrap();
+        assert!(built.headers().get("X-API-Key").is_none());
+    }
+
+    #[test]
+    fn test_build_request_with_api_key() {
+        let client = reqwest::blocking::Client::new();
+        let request = build_request(&client, "https://example.com/api/", Some("test-key-123"));
+        let built = request.build().unwrap();
+        assert_eq!(
+            built.headers().get("X-API-Key").unwrap().to_str().unwrap(),
+            "test-key-123"
+        );
+    }
+
+    #[test]
+    fn test_build_request_url() {
+        let client = reqwest::blocking::Client::new();
+        let request = build_request(&client, "https://example.com/api/", None);
+        let built = request.build().unwrap();
+        assert_eq!(built.url().as_str(), "https://example.com/api/");
+    }
+
+    #[test]
+    fn test_build_request_is_get() {
+        let client = reqwest::blocking::Client::new();
+        let request = build_request(&client, "https://example.com/api/", None);
+        let built = request.build().unwrap();
+        assert_eq!(built.method(), reqwest::Method::GET);
+    }
+
+    #[test]
+    fn test_write_all_exercises() {
+        let dir = TempDir::new().unwrap();
+        let base = dir.path().join("exercises");
+        let bites = vec![
+            sample_bite("Hello", "hello", "intro"),
+            sample_bite("Strings", "strings", "easy"),
+        ];
+        write_all_exercises(&base, &bites).unwrap();
+
+        assert!(base.join("intro").join("hello").join("Cargo.toml").exists());
+        assert!(base.join("intro").join("hello").join("bite.md").exists());
+        assert!(
+            base.join("intro")
+                .join("hello")
+                .join("src")
+                .join("lib.rs")
+                .exists()
+        );
+        assert!(
+            base.join("easy")
+                .join("strings")
+                .join("Cargo.toml")
+                .exists()
+        );
+        assert!(base.join("Cargo.toml").exists());
+        assert!(base.join("README.md").exists());
+
+        let root_toml = fs::read_to_string(base.join("Cargo.toml")).unwrap();
+        assert!(root_toml.contains("\"intro/hello\""));
+        assert!(root_toml.contains("\"easy/strings\""));
+    }
+
+    #[test]
+    fn test_write_all_exercises_empty() {
+        let dir = TempDir::new().unwrap();
+        let base = dir.path().join("exercises");
+        let bites: Vec<Bite> = vec![];
+        write_all_exercises(&base, &bites).unwrap();
+
+        assert!(base.join("Cargo.toml").exists());
+        assert!(base.join("README.md").exists());
+    }
+
+    #[test]
+    fn test_write_all_exercises_preserves_existing_work() {
+        let dir = TempDir::new().unwrap();
+        let base = dir.path().join("exercises");
+        let bites = vec![sample_bite("Hello", "hello", "intro")];
+
+        write_all_exercises(&base, &bites).unwrap();
+
+        let lib_path = base.join("intro").join("hello").join("src").join("lib.rs");
+        fs::write(&lib_path, "fn my_solution() {}").unwrap();
+
+        write_all_exercises(&base, &bites).unwrap();
+
+        let lib_content = fs::read_to_string(&lib_path).unwrap();
+        assert_eq!(lib_content, "fn main() {}");
+
+        let backup_files: Vec<_> = fs::read_dir(base.join("intro").join("hello").join("src"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().to_string_lossy().contains("lib.rs."))
+            .collect();
+        assert_eq!(backup_files.len(), 1);
+        let backup_content = fs::read_to_string(backup_files[0].path()).unwrap();
+        assert_eq!(backup_content, "fn my_solution() {}");
+    }
 }
