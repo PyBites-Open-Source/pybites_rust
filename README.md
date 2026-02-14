@@ -10,10 +10,19 @@ Exercise downloader for https://rustplatform.com/
     cargo install --git https://github.com/markgreene74/pybites_rust.git
     ```
 - `cd` to the directory where you want to save the exercises
-- run the downloader
+- run the downloader (free exercises only):
     ```shell
     pybites-rust-download
     ```
+- to download **all** exercises (requires premium), set your API key:
+    ```shell
+    PYBITES_API_KEY=your-api-key-here pybites-rust-download
+    ```
+    Or export it in your shell profile so you don't have to pass it every time:
+    ```shell
+    export PYBITES_API_KEY=your-api-key-here
+    ```
+    You can find your API key on your [profile page](https://rustplatform.com/profile/).
 
 ### Compile it manually
 
