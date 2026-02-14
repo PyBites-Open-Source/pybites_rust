@@ -148,9 +148,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // define the base_path (current directory / exercises)
     let base_path = env::current_dir().unwrap().join("exercises");
 
-    print!("Downloading the exercises from Pybites Rust (rustplatform.com)");
+    let api_key = env::var("PYBITES_API_KEY").ok();
+
     let client = reqwest::blocking::Client::new();
-    let response = client.get("https://rustplatform.com/api/").send()?;
+    let mut request = client.get("https://rustplatform.com/api/");
+    if let Some(ref key) = api_key {
+        println!("Authenticating with API key");
+        request = request.header("X-API-Key", key);
+    } else {
+        println!("No API key set (PYBITES_API_KEY), downloading free exercises only");
+    }
+
+    print!("Downloading the exercises from Pybites Rust (rustplatform.com)");
+    let response = request.send()?;
     println!(" ✅");
     println!(
         "'exercises' will be created in the current directory ({})",
