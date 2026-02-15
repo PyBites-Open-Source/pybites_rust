@@ -5,9 +5,9 @@ Exercise downloader for https://rustplatform.com/
 
 ### Quickstart
 
-- install the exercise downloader directly from GitHub, open a terminal and run:
+- install the exercise downloader, open a terminal and run:
     ```shell
-    cargo install --git https://github.com/PyBites-Open-Source/pybites_rust.git
+    cargo install pybites-rust-download
     ```
 - `cd` to the directory where you want to save the exercises
 - run the downloader (free exercises only):
@@ -56,20 +56,18 @@ make download-exercises
 
 <details><summary>(Open to see some output examples ...)</summary>
 
-Using `cargo` to install from GitHub.
+Using `cargo` to install from crates.io.
 
 ```shell
-➜ cargo install --git https://github.com/PyBites-Open-Source/pybites_rust.git
-    Updating git repository `https://github.com/PyBites-Open-Source/pybites_rust.git`
-  Installing pybites-rust-download v0.1.2 (https://github.com/PyBites-Open-Source/pybites_rust.git#d1afb2ec)
+➜ cargo install pybites-rust-download
+  Installing pybites-rust-download v0.1.4
 
 (...)
 
-
-   Compiling pybites-rust-download v0.1.2 (/my/home/.cargo/git/checkouts/pybites_rust-b497f94da89af8aa/d1afb2e/excercise_downloader)
+   Compiling pybites-rust-download v0.1.4
     Finished `release` profile [optimized] target(s) in 15.61s
   Installing /my/home/.cargo/bin/pybites-rust-download
-   Installed package `pybites-rust-download v0.1.2 (https://github.com/PyBites-Open-Source/pybites_rust.git#d1afb2ec)` (executable `pybites-rust-download`)                                                                                                /15.8s
+   Installed package `pybites-rust-download v0.1.4` (executable `pybites-rust-download`)
 
 ➜
 ```
@@ -118,4 +116,4 @@ Downloading the exercises from Pybites Rust (rustplatform.com) ✅
 
 ### Credits
 
-Originally created by [Mark Greene](https://github.com/markgreene74).
+Originally created by [Giuseppe Cunsolo](https://github.com/markgreene74).

@@ -2,6 +2,14 @@
 name = "pybites-rust-download"
 version = "0.1.4"
 edition = "2024"
+authors = ["Bob Belderbos", "Giuseppe Cunsolo"]
+description = "Exercise downloader for the PyBites Rust platform (rustplatform.com)"
+license = "MIT"
+repository = "https://github.com/PyBites-Open-Source/pybites_rust"
+homepage = "https://rustplatform.com/"
+readme = "../README.md"
+keywords = ["pybites", "rust", "exercises"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 reqwest = { version="0.12.23" , features = ["blocking", "json"]}
