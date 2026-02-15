@@ -24,6 +24,20 @@ Exercise downloader for https://rustplatform.com/
     ```
     You can find your API key on your [profile page](https://rustplatform.com/profile/).
 
+### Navigating exercises
+
+Once downloaded, use [fzf](https://github.com/junegunn/fzf) to quickly jump between exercise directories:
+
+```bash
+cdf() {
+  local dir
+  dir=$(find . -type d | fzf --reverse --prompt='cd to> ') || return
+  cd "$dir"
+}
+```
+
+Add this to your shell profile, then type `cdf` to fuzzy-search and `cd` into any exercise.
+
 ### Compile it manually
 
 Maybe you want to have a look at the code and make some changes.
