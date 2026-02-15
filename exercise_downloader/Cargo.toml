@@ -11,6 +11,9 @@ readme = "../README.md"
 keywords = ["pybites", "rust", "exercises"]
 categories = ["command-line-utilities"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+
 [dependencies]
 reqwest = { version="0.12.23" , features = ["blocking", "json"]}
 serde = { version = "1.0.227", features = ["derive"] }

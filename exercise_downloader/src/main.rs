@@ -187,6 +187,7 @@ fn write_all_exercises(base_path: &Path, bites: &[Bite]) -> std::io::Result<()> 
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_path = env::current_dir().unwrap().join("exercises");
 
